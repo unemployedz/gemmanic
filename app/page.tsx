@@ -22,7 +22,8 @@ export default function Home() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [mode, setMode] = useState<"chat" | "code">("chat");
   const [modelOpen, setModelOpen] = useState(false);
-  const [model, setModel] = useState("Gemma 4 E4B");
+  const [model] = useState("Beam 1.0");
+  const [isSending, setIsSending] = useState(false);
   const [composer, setComposer] = useState("");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [reasoningOpen, setReasoningOpen] = useState(false);
@@ -36,19 +37,29 @@ export default function Home() {
   const hasMessages = messages.length > 0;
   const statusLabel = useMemo(() => mode === "chat" ? "Chat" : "Code workspace", [mode]);
 
-  function sendMessage(value = composer) {
+  async function sendMessage(value = composer) {
     const clean = value.trim();
-    if (!clean) return;
-    setMessages(current => [...current, { role: "user", content: clean }]);
+    if (!clean || isSending) return;
+    const nextMessages: ChatMessage[] = [...messages, { role: "user", content: clean }];
+    setMessages(nextMessages);
     setComposer("");
     setReasoningOpen(false);
-    window.setTimeout(() => {
-      setMessages(current => [...current, {
-        role: "assistant",
-        content: "The workspace interface is ready. Connect a model provider to enable live responses.",
-        reasoning: "The message was received by the interface. No inference provider is configured yet, so this is a local preview response."
-      }]);
-    }, 450);
+    setIsSending(true);
+    try {
+      const response = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ messages: nextMessages.map(({ role, content }) => ({ role, content })) })
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Beam could not complete the request.");
+      setMessages(current => [...current, { role: "assistant", content: data.content }]);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Something went wrong while contacting Beam.";
+      setMessages(current => [...current, { role: "assistant", content: message }]);
+    } finally {
+      setIsSending(false);
+    }
   }
 
   function newSession() {
@@ -146,11 +157,11 @@ export default function Home() {
                       </div>
                       <div className="composer-right">
                         <button className="model-button" onClick={() => setModelOpen(true)}><span className="model-indicator"/> {model}<ChevronDown size={13}/></button>
-                        <button className="send-button" onClick={() => sendMessage()} disabled={!composer.trim()} aria-label="Send message"><Send size={16}/></button>
+                        <button className="send-button" onClick={() => sendMessage()} disabled={!composer.trim() || isSending} aria-label="Send message">{isSending ? <Activity size={16}/> : <Send size={16}/>}</button>
                       </div>
                     </div>
                   </div>
-                  <div className="composer-note">Gemmanic preview · Responses are simulated until a model is connected</div>
+                  <div className="composer-note">Gemmanic preview · Powered by Reflection Beam 1.0 · Bionic Secure Cloud</div>
                 </div>
               </div>
             ) : (
@@ -158,7 +169,7 @@ export default function Home() {
                 <div className="code-toolbar"><div><Code2 size={16}/> <b>Workspace editor</b><span className="muted">Preview only</span></div><button className="small-button" onClick={() => setFileName("untitled.ts")}><FilePlus2 size={14}/> New file</button></div>
                 <div className="editor-layout">
                   <div className="file-list"><div className="file-list-title">FILES <Plus size={14}/></div><button className="file-row file-selected"><File size={14}/>{fileName}</button><button className="file-row"><File size={14}/>README.md</button></div>
-                  <div className="editor-empty"><div className="editor-icon"><Code2 size={24}/></div><h2>Code workspace</h2><p>The editor shell is ready. File execution and local computer access are intentionally not included.</p><div className="editor-file-label">{fileName}</div></div>
+                  <div className="editor-empty"><div className="editor-icon"><Code2 size={24}/></div><h2>Code workspace</h2><p>Beam 1.0 powers chat and code mode. File execution and local computer access are intentionally not included.</p><div className="editor-file-label">{fileName}</div></div>
                 </div>
               </div>
             )}
@@ -178,9 +189,9 @@ export default function Home() {
           <div className="modal-heading"><div><span className="modal-kicker">MODEL LIBRARY</span><h2>Select a model</h2></div><button className="icon-button" onClick={() => setModelOpen(false)} aria-label="Close model picker"><X size={18}/></button></div>
           <div className="model-search"><Search size={16}/><input placeholder="Search models"/></div>
           <div className="model-group-title">AVAILABLE MODELS</div>
-          {["Gemma 4 E4B","Gemma 3 12B","Llama 3.3 70B","Qwen 2.5 Coder"].map((item,index) => <button className={`model-option ${model === item ? "model-option-active" : ""}`} key={item} onClick={() => {setModel(item);setModelOpen(false);}}><span className="model-option-icon">{index === 0 ? "G" : <Sparkles size={16}/>}</span><span><b>{item}</b><small>{index === 0 ? "Selected workspace model" : "Model selection preview"}</small></span>{model === item && <span className="selected-check"/>}</button>)}
+          {["Beam 1.0"].map((item) => <button className="model-option model-option-active" key={item} onClick={() => setModelOpen(false)}><span className="model-option-icon">B</span><span><b>Reflection Beam 1.0</b><small>bionic/beam-1.0 · Free API model</small></span><span className="selected-check"/></button>)}
           <button className="add-model"><Plus size={15}/> Add a model provider</button>
-          <p className="modal-footnote">Model selection is a UI preview. No inference endpoint is configured.</p>
+          <p className="modal-footnote">Gemmanic is locked to bionic/beam-1.0 through the LM Studio API.</p>
         </div>
       </div>}
     </main>
